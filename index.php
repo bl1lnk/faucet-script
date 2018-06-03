@@ -1,6 +1,8 @@
 <?php 
 include 'libs/core.php'; 
 
+$reward = mt_rand(1, 1000)/10000; //0.1~0.0001
+
 if (isset($_GET['r']) && !isset($_COOKIE['ref'])) {
 	$reff = $mysqli->real_escape_string($_GET['r']);
 	setcookie('ref',  $reff, time()+86400000);
@@ -10,6 +12,9 @@ if (isset($_POST['address']) and isset($_POST['token'])) {
 	
     # clean user's input
 	$address = $mysqli->real_escape_string($_POST['address']);
+    # omit it if start with @
+    preg_match('/@?(\S+)/', $address, $matches);
+    $address = $matches[1];
 	if (!isset($_COOKIE['address'])) {
 		setcookie('address', $address, time()+1000000);
 	} 
@@ -75,19 +80,19 @@ if (isset($_POST['address']) and isset($_POST['token'])) {
 					$microzeny_api = get_info(6);
 					$currency = $faucet['currency'];
 					$microzeny = new Microzeny($microzeny_api, $currency);
-					$result = $microzeny->send($address, $faucet['reward'], $ip);
+					$result = $microzeny->send($address, $reward, 'false', $ip);
 					if (isset($_COOKIE['ref']) && $address !== $_COOKIE['ref']) {
 						$ref = $mysqli->real_escape_string($_COOKIE['ref']);
-						$amt = floor($faucet['reward'] / 100 * $faucet['ref']);
-						$s = $microzeny->sendReferralEarnings($ref, $amt);
+						$amt = floor($reward / 100 * $faucet['ref']);
+						$s = $microzeny->sendReferralEarnings($ref, $amt, $ip);
 					}
 					if ($result['success'] == true) {
 						log_user($address, $ip);
-						$new_balance = $result['balance'];
+						$new_balance = $result['balance'] / 100000000;
 						$mysqli->query("UPDATE settings SET value = '$new_balance' WHERE id = '30'");
 						$alert = "<center><img style='max-width: 200px;' src='template/img/trophy.png'><br>{$result['html']}</center>";
 					} else {
-						$alert = "<center><img style='max-width: 200px;' src='template/img/trophy.png'><br><div class='alert alert-danger'>Failed to send your reward :(</div></center>"; 
+						$alert = "<center><img style='max-width: 200px;' src='template/img/trophy.png'><br><div class='alert alert-danger'>{$result['html']}</div></center>";
 					}
 				}
 			}
@@ -109,14 +114,14 @@ if (isset($_GET['k'])) {
 		$mysqli->query("DELETE FROM link WHERE sec_key = '$key'");
 		$microzeny_api = get_info(6);
 		$microzeny = new Microzeny($microzeny_api, $faucet['currency']);
-		$rew = get_info(11) + $faucet['reward'];
+		$rew = get_info(11) + $reward;
 		$result = $microzeny->send($address, $rew, $ip);
-		$new_balance = $result['balance'];
+        $new_balance = $result['balance'] / 100000000;
 		$mysqli->query("UPDATE settings SET value = '$new_balance' WHERE id = '30'");
 		if (isset($_COOKIE['ref']) && $address !== $_COOKIE['ref']) {
 			$ref = $mysqli->real_escape_string($_COOKIE['ref']);
 			$amt = floor($rew / 100 * $faucet['ref']);
-			$s = $microzeny->sendReferralEarnings($ref, $amt);
+			$s = $microzeny->sendReferralEarnings($ref, $amt, $ip);
 		}
 		$alert = "<center><img style='max-width: 200px;' src='template/img/trophy.png'><br>{$result['html']}</center>";
 	} else {
@@ -130,19 +135,33 @@ $_SESSION['token'] = get_token(70);
 <html>
 <head>
 	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<?php
+	if ( is_null($ua) ) {
+  $ua = $_SERVER['HTTP_USER_AGENT'];
+}
+if ( preg_match('/iPad/', $ua) ) {
+  echo '<meta name="viewport" content="width=640">';
+} else {
+  echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
+}
+?>
 	<title><?=$faucet['name']?> - <?=$faucet['description']?></title> 
 	<link rel="shortcut icon" href="template//img/favicon.ico" type="image/x-icon">
 	<link rel="icon" href="template/img/favicon.ico" type="template/image/x-icon">
 	<!--<link href="https://fonts.googleapis.com/css?family=Saira+Extra+Condensed" rel="stylesheet">-->
 	<link rel="stylesheet" type="text/css" href="template/css/<?=$faucet['theme']?>.css"> 
 	<link rel="stylesheet" href="template/css/countdown.css"> 
+	<link rel="stylesheet" href="template/css/ad.css">
+        <link rel="stylesheet" href="template/css/table.css">
+        <script src="template/js/jquery-3.2.1.min.js"></script>
+        <script src="template/js/temp.js"></script>  
 	<style type="text/css"> 
 	body {  
 		;font-family: 'Saira Extra Condensed', sans-serif;
 		font-weight:400;
 		font-size:0.875em;
 		letter-spacing:0.043em;
+		background: slategray;
 	}
 	img, iframe {
 		max-width: 100%;
@@ -213,32 +232,56 @@ $_SESSION['token'] = get_token(70);
 		right: 0;
 		border-width: 1em 1em 0 0;
 	}
+	h1.ttl-bdr {
+        background: #444;
+        box-shadow: 0px 0px 0px 5px #444;
+        border: dashed 2px white;
+        padding: 0.2em 0.5em;
+        color: white;
+        width:fit-content;
+        margin: 0 auto;
+        margin-top: 20px;
+    }
+    .noticebox{    
+        margin: 2em 0;
+        background: #999;
+    }
+    .noticebox .box-title {
+        font-size: 1.2em;
+        background: #444;
+        padding: 4px;
+        text-align: center;
+        color: #FFF;
+        font-weight: bold;
+        letter-spacing: 0.05em;
+    }
+    .noticebox p {
+        padding: 15px 20px;
+        margin: 0;
+        color: white;
+    }
+    
+    .formbox {
+        padding: 0.5em 1em;
+        margin: 2em 0;
+        color: #5d627b;
+        background: white;
+        border-top: solid 5px #5d627b;
+		box-shadow: 0 3px 5px rgba(0, 0, 0, 0.22);
+		margin: 0 auto;
+    }
+#wrap{width:100%;}
 </style>
 </head>
-<body> 
-	<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<body id="wrap"> 
+	<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
 		<a class="navbar-brand" href="index.php"><?=$faucet['name']?></a>
 		<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarColor01" aria-controls="navbarColor01" aria-expanded="false" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
 
 		<div class="collapse navbar-collapse" id="navbarColor01">
-			<ul class="navbar-nav mr-auto">
-				<li class="nav-item active">
-					<a class="nav-link" href="index.php"><i class="fa fa-home" aria-hidden="true"></i> Home <span class="sr-only">(current)</span></a>
-				</li>
-                <!--
-				<li class="nav-item">
-					<a class="nav-link" href="#"><i class="fa fa-info" aria-hidden="true"></i> About us</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link" href="#"><i class="fa fa-envelope-open" aria-hidden="true"></i> Contact</a>
-				</li>
-                -->
-				<li class="nav-item">
-					<a class="nav-link" href="https://github.com/microzeny/faucet-script"><i class="fa fa-bolt" aria-hidden="true"></i>Microzeny Faucet Script</a>
-				</li>
-			</ul>
+			<div id="nav"></div>
 			<ul class="navbar-nav ml-auto">
 				<li class="nav-item active">
 					<a class="nav-link" href="#"><i class="fa fa-balance-scale" aria-hidden="true"></i> Faucet Balance: <?=get_info(30)?> <?=$currency_name?> <span class="sr-only">(current)</span></a>
@@ -249,15 +292,16 @@ $_SESSION['token'] = get_token(70);
 	<center>
 		<?=$ad['top']?>
 	</center>
-	<h1 class="ribbon ribbon-content"><?=$faucet['name']?></h1>
+	<h1 class="ttl-bdr"><?=$faucet['name']?></h1>
 	<div class="container-fluid" style="margin-top: 30px;">
 		<div class="row">
 			<div class="col-sm-3 text-center" style="margin-top: 20px;">
 				<?=$ad['left']?>
 			</div>
-			<div class="col-sm-6 login">
-				<div class="alert alert-success text-center" style="margin-top: 10px;">
-					<p><i class="fa fa-trophy" aria-hidden="true"></i> <?=$faucet['reward']?> <?=$currency_name?> が <?=floor($faucet['timer']/60)?> 分ごとに受け取れます</p>
+			<div class="formbox">
+				<div class="noticebox" style="margin-top: 10px;">
+					<div class="box-title">報酬情報</div>
+					<p><i class="fa fa-trophy" aria-hidden="true"></i> 0.0001-0.1 <?=$currency_name?> が <?=floor($faucet['timer']/3600)?> 時間ごとに受け取れます</p>
 				</div>
 				<center>
 					<?=$ad['above-form']?>
@@ -285,7 +329,6 @@ $_SESSION['token'] = get_token(70);
 						</div>
 					</div> 
                     <ul>
-                        <li>先頭の@は省略してください</li>
                         <li>microzenyのアカウントをまだ持っていない場合は<a href="https://microzeny.com/login">こちら</a>から登録できます</li>
                     </ul>
 					<center>
@@ -307,7 +350,7 @@ $_SESSION['token'] = get_token(70);
 						<span class="custom-control-description"><i class="fa fa-gift" aria-hidden="true"></i> <strong>I want to click <font color="#F67F7F">SHORT LINK</font> and receive<font color="#F67F7F"> + <?=get_info(8)?> satoshi bounus</font></strong></span>
 					</label> 
 					<?php break; } }} ?>
-					<button type="button" class="btn btn-warning btn-lg btn-block" style="margin-bottom: 20px;" data-toggle="modal" data-target="#next"><i class="fa fa-paper-plane" aria-hidden="true"></i> <strong>BitZenyをもらう</strong></button>
+					<button type="button" class="btn btn-dark btn-lg btn-block" style="margin-bottom: 20px;" data-toggle="modal" data-target="#next"><i class="fa fa-paper-plane" aria-hidden="true"></i> <strong>BitZenyをもらう</strong></button>
 					<div class="modal fade bd-example-modal-lg" id="next" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
 						<div class="modal-dialog modal-lg" role="document">
 							<div class="modal-content">
@@ -322,12 +365,13 @@ $_SESSION['token'] = get_token(70);
 								</div>
 								<div class="modal-footer">
 									<button type="button" class="btn btn-secondary" data-dismiss="modal">キャンセル</button>
-									<button type="submit" class="btn btn-primary" id="claim">BitZenyをもらう</button>
+									<button type="submit" class="btn btn-dark" id="claim">BitZenyをもらう</button>
 								</div>
 							</div>
 						</div>
 					</div>
-					<code>紹介リンク: <?=$faucet['url']?>?r=あなたのmicrozenyのアカウントID</code>
+					<script type="text/javascript" async src="//platform.twitter.com/widgets.js"></script>
+                                        <a href="https://twitter.com/share" class="twitter-share-button" data-via="kikiriko200">Tweet</a>
 				</form>
 				<?php } else { $wait= 1; echo "<div class='alert alert-info'>しばらくお待ちください</div><br><div id='CountDownTimer' data-timer='" . checkip($ip) . "' style='width: 100%;'></div>"; } ?> 
 			</div>
@@ -342,11 +386,11 @@ $_SESSION['token'] = get_token(70);
 		<p>&copy; 2018 <a href='<?=$faucet['url']?>'><?=$faucet['name']?></a>, <strong id='copyright'>Powered by <a href='https://faucet.microzeny.com/' class="cbc">microzeny faucet</a></strong></p>
 		<p>Original Script <strong id='copyright'>Powered by <a href='http://coinbox.club' class="cbc">CoinBox Script</a></strong></p>
 	</footer> 
-	<script src="template/js/jquery-3.2.1.min.js"></script>
 	<script src="template/js/popper.min.js"></script>
 	<script src="template/js/bootstrap.min.js"></script>
 	<script src="https://use.fontawesome.com/7002d3875b.js"></script>
 	<script src="template/js/adblock.js"></script>
+	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css" integrity="sha384-DNOHZ68U8hZfKXOrtjWvjxusGo9WQnrNx2sqG0tfsghAvtVlRW3tvkXWZh58N9jp" crossorigin="anonymous">
 	<?php if (isset($alert)) { ?>
 	<script type='text/javascript'>$('#alert').modal('show');</script>
 	<?php  } ?>
@@ -358,3 +402,4 @@ $_SESSION['token'] = get_token(70);
 <?php
 $mysqli->close();
 ?>
+	
