@@ -27,6 +27,8 @@
 
 - satetsu888
 
+- DAFU(DAFU's Faucetの内容に合わせて一部Commit)
+
 # オリジナル作者
 
 - tungaqhd (Nguyễn Sỹ Tùng)
